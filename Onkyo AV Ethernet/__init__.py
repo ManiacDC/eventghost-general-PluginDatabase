@@ -125,6 +125,7 @@ cmdList = (
         ('InputGame',              'Game / TV',                                                  'SLI02',             None),
         ('InputAux1',              'Aux 1',                                                      'SLI03',             None),
         ('InputAux2',              'Aux 2',                                                      'SLI04',             None),
+        ('InputPC',                'PC',                                                         'SLI05',             None),
         ('InputDVD',               'DVD',                                                        'SLI10',             None),
         ('InputTape',              'Tape',                                                       'SLI20',             None),
         ('InputPhono',             'Phono',                                                      'SLI22',             None),
@@ -349,6 +350,7 @@ cmdList = (
         ('Z2InputGAME/TV',         'Input Game / TV',                                            'SLZ02',             None),
         ('Z2InputAUX1',            'Input Aux 1',                                                'SLZ03',             None),
         ('Z2InputAUX2',            'Input Aux 2',                                                'SLZ04',             None),
+        ('Z2InputPC',              'Input PC',                                                   'SLZ05',             None),
         ('Z2InputDVD',             'Input DVD',                                                  'SLZ10',             None),
         ('Z2InputTAPE',            'Input Tape',                                                 'SLZ20',             None),
         ('Z2InputPHONO',           'Input Phono',                                                'SLZ22',             None),
@@ -386,6 +388,7 @@ cmdList = (
         ('Z3InputGAME/TV',         'Input Game / TV',                                            'SL302',             None),
         ('Z3InputAUX1',            'Input Aux 1',                                                'SL303',             None),
         ('Z3InputAUX2',            'Input Aux 2',                                                'SL304',             None),
+        ('Z3InputPC',              'Input PC',                                                   'SL305',             None),
         ('Z3InputDVD',             'Input DVD',                                                  'SL310',             None),
         ('Z3InputTAPE',            'Input Tape',                                                 'SL320',             None),
         ('Z3InputPHONO',           'Input Phono',                                                'SL322',             None),
@@ -600,9 +603,15 @@ cmdList = (
 
 )
 
-def send_cmd(sock, cmd):
+def send_cmd(plugin, cmd):
     data = struct.pack(">4sIIcxxx%ssc" % len(cmd), b"ISCP", 16, len(cmd) + 1, b"\x01", cmd, b"\r")
-    sock.sendall(data)
+    try:
+        plugin.sock.sendall(data)
+    except ConnectionResetError:
+        plugin.connect()
+        plugin.sock.sendall(data)
+
+
 
 
 def extract_eiscp_header(header):
@@ -620,7 +629,7 @@ class CmdAction(eg.ActionClass):
     """Base class for all argumentless actions"""
 
     def __call__(self):
-        send_cmd(self.plugin.sock, self.cmd)
+        send_cmd(self.plugin, self.cmd)
 
 
 
@@ -628,14 +637,14 @@ class ValueAction(eg.ActionWithStringParameter):
     """Base class for all actions with adjustable argument"""
 
     def __call__(self, data):
-        send_cmd(self.plugin.sock, self.cmd + data)
+        send_cmd(self.plugin, self.cmd + data)
 
 
 class Raw(eg.ActionWithStringParameter):
     name = 'Send Raw command'
 
     def __call__(self, data):
-        send_cmd(self.plugin.sock, b'!1' + data)
+        send_cmd(self.plugin, b'!1' + data)
 
 class OnkyoEthernet(eg.PluginClass):
 
@@ -683,6 +692,7 @@ class OnkyoEthernet(eg.PluginClass):
             '02': 'Video3',
             '03': 'Video4',
             '04': 'Video5',
+            '05': 'PC',
             '10': 'DVD',
             '20': 'Tape1',
             '22': 'Phono',
@@ -772,11 +782,16 @@ class OnkyoEthernet(eg.PluginClass):
     def __start__(self, host, port):
         self.host = host
         self.port = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((host, port))
+        self.sock = None
+        self.connect()
         self.listener_thread = threading.Thread(target=self.listen_forever)
         self.listener_thread.daemon = True
         self.listener_thread.start()
+
+    def connect(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((self.host, self.port))
+
 
 
     def __stop__(self):
