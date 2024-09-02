@@ -607,7 +607,7 @@ def send_cmd(plugin, cmd):
     data = struct.pack(">4sIIcxxx%ssc" % len(cmd), b"ISCP", 16, len(cmd) + 1, b"\x01", cmd, b"\r")
     try:
         plugin.sock.sendall(data)
-    except ConnectionResetError:
+    except socket.error:
         plugin.connect()
         plugin.sock.sendall(data)
 
@@ -865,7 +865,11 @@ class OnkyoEthernet(eg.PluginClass):
         for _ in range(num_bytes):
             ready = select.select([self.sock], [], [], 1)[0]
             if ready:
-                data += self.sock.recv(1)
+                try:
+                    data += self.sock.recv(1)
+                except socket.error:
+                    self.connect()
+                    data += self.sock.recv(1)
             else:
                 # timeout hit, did not receive expected bytes
                 return None
